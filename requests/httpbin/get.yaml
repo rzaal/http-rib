@@ -1,0 +1,8 @@
+name: Get
+method: GET
+url: "{{baseUrl}}/get"
+headers:
+  Accept: application/json
+query:
+  source: ribnip
+body: ""

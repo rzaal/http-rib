@@ -1,0 +1,7 @@
+name: Headers
+method: GET
+url: "{{baseUrl}}/headers"
+headers:
+  X-Env-Token: "{{token}}"
+query: {}
+body: ""

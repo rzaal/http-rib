@@ -1,0 +1,9 @@
+name: Post JSON
+method: POST
+url: "{{baseUrl}}/post"
+headers:
+  Content-Type: application/json
+  Authorization: "Bearer {{token}}"
+query: {}
+body: |
+  {"hello": "world"}

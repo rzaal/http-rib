@@ -1,2 +1,3 @@
 /ribnip
 *.log
+requests/env/*.secrets.yaml

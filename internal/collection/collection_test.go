@@ -1,7 +1,9 @@
 package collection
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,23 +28,14 @@ func TestScaffoldAndLoad(t *testing.T) {
 		t.Errorf("Manifest.Name = %q, want %q", coll.Manifest.Name, filepath.Base(dir))
 	}
 
+	// requests/ starts empty aside from the reserved env/ folder
 	flat := Flatten(coll.Tree)
-	if len(flat) == 0 {
-		t.Fatal("expected at least one item in tree")
+	if len(flat) != 0 {
+		t.Errorf("expected empty request tree on scaffold, got %d items: %v", len(flat), flat)
 	}
 
-	found := false
-	for _, fi := range flat {
-		if fi.Item.Request != nil && fi.Item.Request.Method == "GET" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected sample GET request in tree")
-	}
-
-	if len(coll.Envs.Names()) != 3 {
-		t.Errorf("expected 3 envs, got %d: %v", len(coll.Envs.Names()), coll.Envs.Names())
+	if len(coll.Envs.Names()) != 1 {
+		t.Errorf("expected only dev env, got %d: %v", len(coll.Envs.Names()), coll.Envs.Names())
 	}
 
 	name, env := coll.Envs.Default()
@@ -51,6 +44,26 @@ func TestScaffoldAndLoad(t *testing.T) {
 	}
 	if env["baseUrl"] == "" {
 		t.Errorf("expected baseUrl in dev env")
+	}
+	if env["token"] == "" {
+		t.Errorf("expected secret token merged into dev env, got %v", env)
+	}
+
+	// secrets files must exist but stay out of git
+	secretsPath := filepath.Join(dir, requestsDirName, envSubdir, "dev"+secretsSuffix)
+	if _, err := os.Stat(secretsPath); err != nil {
+		t.Errorf("expected secrets file at %s: %v", secretsPath, err)
+	}
+	examplePath := filepath.Join(dir, requestsDirName, envSubdir, "dev"+secretsExampleSuffix)
+	if _, err := os.Stat(examplePath); err != nil {
+		t.Errorf("expected secrets example file at %s: %v", examplePath, err)
+	}
+	gitignoreData, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected .gitignore to be created: %v", err)
+	}
+	if !strings.Contains(string(gitignoreData), "*"+secretsSuffix) {
+		t.Errorf(".gitignore missing secrets pattern, got: %s", gitignoreData)
 	}
 }
 

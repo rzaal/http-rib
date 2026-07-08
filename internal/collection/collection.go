@@ -34,6 +34,11 @@ type Collection struct {
 }
 
 const manifestName = "ribnip.yaml"
+const requestsDirName = "requests"
+
+// envSubdir is the requests/ subfolder reserved for environments; it's
+// loaded via LoadEnvs and excluded from the browsable request tree.
+const envSubdir = "env"
 
 // ErrNoCollection is returned by Load when dir has no ribnip.yaml.
 type ErrNoCollection struct{ Dir string }
@@ -64,7 +69,7 @@ func Load(dir string) (*Collection, error) {
 		return nil, fmt.Errorf("load envs: %w", err)
 	}
 
-	tree, err := loadTree(filepath.Join(dir, "requests"), "")
+	tree, err := loadTree(filepath.Join(dir, requestsDirName), "")
 	if err != nil {
 		return nil, fmt.Errorf("load requests: %w", err)
 	}
@@ -90,6 +95,9 @@ func loadTree(dir, relPrefix string) ([]*Item, error) {
 			rel = filepath.Join(relPrefix, ent.Name())
 		}
 		if ent.IsDir() {
+			if relPrefix == "" && ent.Name() == envSubdir {
+				continue // reserved for environments, not a browsable request folder
+			}
 			children, err := loadTree(full, rel)
 			if err != nil {
 				return nil, err
@@ -140,9 +148,11 @@ func Flatten(tree []*Item) []FlatItem {
 	return out
 }
 
-// Scaffold creates a starter collection at dir: manifest, a sample request,
-// and dev/acceptance/production env files. It errors if a manifest already
-// exists.
+// Scaffold creates a starter collection at dir: manifest, a dev env
+// (committed non-secret file plus a gitignored .secrets.yaml sibling for
+// real keys, and a committed .secrets.yaml.example template), and a
+// .gitignore. It errors if a manifest already exists. No sample request is
+// created — the requests/ folder starts empty.
 func Scaffold(dir string) error {
 	manifestPath := filepath.Join(dir, manifestName)
 	if _, err := os.Stat(manifestPath); err == nil {
@@ -155,35 +165,33 @@ func Scaffold(dir string) error {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
-	reqDir := filepath.Join(dir, "requests", "example")
-	if err := os.MkdirAll(reqDir, 0o755); err != nil {
-		return fmt.Errorf("create requests dir: %w", err)
-	}
-	sampleReq := `name: Get Example
-method: GET
-url: "{{baseUrl}}/get"
-headers:
-  Accept: application/json
-query: {}
-body: ""
-`
-	if err := os.WriteFile(filepath.Join(reqDir, "get-example.yaml"), []byte(sampleReq), 0o644); err != nil {
-		return fmt.Errorf("write sample request: %w", err)
-	}
-
-	envDir := filepath.Join(dir, "env")
+	envDir := filepath.Join(dir, requestsDirName, envSubdir)
 	if err := os.MkdirAll(envDir, 0o755); err != nil {
 		return fmt.Errorf("create env dir: %w", err)
 	}
-	envs := map[string]string{
-		"dev.yaml":        "baseUrl: \"https://httpbin.org\"\ntoken: \"dev-secret\"\n",
-		"acceptance.yaml": "baseUrl: \"https://acceptance.api.example.com\"\ntoken: \"acceptance-secret\"\n",
-		"production.yaml": "baseUrl: \"https://api.example.com\"\ntoken: \"prod-secret\"\n",
+
+	base := "baseUrl: \"https://httpbin.org\"\n"
+	if err := os.WriteFile(filepath.Join(envDir, "dev.yaml"), []byte(base), 0o644); err != nil {
+		return fmt.Errorf("write dev env: %w", err)
 	}
-	for fname, content := range envs {
-		if err := os.WriteFile(filepath.Join(envDir, fname), []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write env %s: %w", fname, err)
+
+	secrets := "token: \"dev-secret\"\n"
+	if err := os.WriteFile(filepath.Join(envDir, "dev"+secretsSuffix), []byte(secrets), 0o600); err != nil {
+		return fmt.Errorf("write dev secrets: %w", err)
+	}
+
+	example := "token: \"changeme\"\n"
+	if err := os.WriteFile(filepath.Join(envDir, "dev"+secretsExampleSuffix), []byte(example), 0o644); err != nil {
+		return fmt.Errorf("write dev secrets example: %w", err)
+	}
+
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+		ignore := fmt.Sprintf("%s/%s/*%s\n", requestsDirName, envSubdir, secretsSuffix)
+		if err := os.WriteFile(gitignorePath, []byte(ignore), 0o644); err != nil {
+			return fmt.Errorf("write .gitignore: %w", err)
 		}
 	}
+
 	return nil
 }
