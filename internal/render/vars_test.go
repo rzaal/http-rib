@@ -3,7 +3,7 @@ package render
 import (
 	"testing"
 
-	"github.com/rzaal/ribnip/internal/collection"
+	"github.com/rzaal/http-rib/internal/collection"
 )
 
 func TestApply(t *testing.T) {

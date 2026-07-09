@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rzaal/ribnip/internal/collection"
-	"github.com/rzaal/ribnip/internal/render"
+	"github.com/rzaal/http-rib/internal/collection"
+	"github.com/rzaal/http-rib/internal/render"
 )
 
 // delimiter marks the end of the response body / start of curl's -w metadata
 // in the combined output stream.
-const metaDelim = "\n===RIBNIP-META==="
+const metaDelim = "\n===HTTP-RIB-META==="
 
 // BuildArgs renders {{vars}} in req against env and assembles the curl argv
 // (without the leading "curl" itself — that's the exec'd binary name).
@@ -165,7 +165,7 @@ func Run(ctx context.Context, args []string) Result {
 // CheckAvailable errors with a clear message if curl isn't on PATH.
 func CheckAvailable() error {
 	if _, err := exec.LookPath("curl"); err != nil {
-		return fmt.Errorf("curl not found on PATH: install curl to use ribnip")
+		return fmt.Errorf("curl not found on PATH: install curl to use http-rib")
 	}
 	return nil
 }

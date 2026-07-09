@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Manifest is the parsed ribnip.yaml at the collection root.
+// Manifest is the parsed http-rib.yaml at the collection root.
 type Manifest struct {
 	Name    string `yaml:"name"`
 	Version int    `yaml:"version"`
@@ -25,7 +25,7 @@ type Item struct {
 	Children []*Item
 }
 
-// Collection is a loaded ribnip collection: manifest + request tree + envs.
+// Collection is a loaded http-rib collection: manifest + request tree + envs.
 type Collection struct {
 	Dir      string
 	Manifest Manifest
@@ -33,14 +33,14 @@ type Collection struct {
 	Envs     *Envs
 }
 
-const manifestName = "ribnip.yaml"
+const manifestName = "http-rib.yaml"
 const requestsDirName = "requests"
 
 // envSubdir is the requests/ subfolder reserved for environments; it's
 // loaded via LoadEnvs and excluded from the browsable request tree.
 const envSubdir = "env"
 
-// ErrNoCollection is returned by Load when dir has no ribnip.yaml.
+// ErrNoCollection is returned by Load when dir has no http-rib.yaml.
 type ErrNoCollection struct{ Dir string }
 
 func (e *ErrNoCollection) Error() string {
@@ -48,7 +48,7 @@ func (e *ErrNoCollection) Error() string {
 }
 
 // Load reads a collection rooted at dir. Returns *ErrNoCollection if dir has
-// no ribnip.yaml.
+// no http-rib.yaml.
 func Load(dir string) (*Collection, error) {
 	manifestPath := filepath.Join(dir, manifestName)
 	data, err := os.ReadFile(manifestPath)

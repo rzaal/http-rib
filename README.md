@@ -1,4 +1,4 @@
-# ribnip
+# http-rib
 
 A terminal HTTP client, like Bruno, but living in a git repo. Requests are
 plain YAML files, environments are plain YAML files, and every send just
@@ -13,8 +13,14 @@ shells out to real `curl`.
 
 ```sh
 git clone <this-repo>
-cd ribnip-http
-go build -o ribnip .
+cd http-rib
+go build -o http-rib .
+```
+
+Or install directly with Go:
+
+```sh
+go install github.com/rzaal/http-rib@latest
 ```
 
 ## Usage
@@ -22,11 +28,11 @@ go build -o ribnip .
 Run it inside a git repo (or any directory you want as your collection root):
 
 ```sh
-./ribnip
+./http-rib
 ```
 
-- If the directory already has a `ribnip.yaml`, it opens that collection.
-- If not, ribnip scaffolds a minimal starter for you: manifest, a `dev` env
+- If the directory already has a `http-rib.yaml`, it opens that collection.
+- If not, http-rib scaffolds a minimal starter for you: manifest, a `dev` env
   (see [Env file + secrets](#env-file--secrets)), and a `.gitignore` entry so
   secret values never get committed. `requests/` starts otherwise empty —
   add your own request files and, if needed, more envs (`acceptance.yaml`,
@@ -57,18 +63,11 @@ creates `dev`; the layout below shows a collection that's grown to add
 `acceptance`/`production` envs and a couple of request files too.
 
 ```
-ribnip.yaml                        # collection manifest (name, version)
+http-rib.yaml                        # collection manifest (name, version)
 requests/
   env/
     dev.yaml                       # committed, non-secret vars
     dev.secrets.yaml                # gitignored — real secret values
-    dev.secrets.yaml.example        # committed template, shape only
-    acceptance.yaml
-    acceptance.secrets.yaml
-    acceptance.secrets.yaml.example
-    production.yaml
-    production.secrets.yaml
-    production.secrets.yaml.example
   httpbin/
     get.yaml
     post-json.yaml
@@ -88,7 +87,7 @@ url: "{{baseUrl}}/get"
 headers:
   Accept: application/json
 query:
-  source: ribnip
+  source: http-rib
 body: ""
 ```
 
@@ -123,16 +122,6 @@ so you can spot typos.
 This repo ships with a working example under `requests/httpbin/`, pointed at
 `https://httpbin.org` on the `dev` environment — build and run, pick a
 request, hit `enter`, and you'll get a real response back.
-
-## Project layout
-
-```
-main.go                    entry point: open or scaffold collection, start TUI
-internal/collection/       manifest, request, and env loading + scaffolding
-internal/render/           {{var}} substitution
-internal/curl/             builds curl argv, execs curl, parses the response
-internal/tui/               Bubble Tea UI (sidebar, viewport, status bar)
-```
 
 ## Tests
 

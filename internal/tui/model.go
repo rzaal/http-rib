@@ -1,4 +1,4 @@
-// Package tui implements the Bubble Tea application for ribnip.
+// Package tui implements the Bubble Tea application for http-rib.
 package tui
 
 import (
@@ -11,8 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/rzaal/ribnip/internal/collection"
-	"github.com/rzaal/ribnip/internal/curl"
+	"github.com/rzaal/http-rib/internal/collection"
+	"github.com/rzaal/http-rib/internal/curl"
 )
 
 type responseMsg struct {

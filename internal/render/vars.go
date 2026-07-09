@@ -4,7 +4,7 @@ package render
 import (
 	"regexp"
 
-	"github.com/rzaal/ribnip/internal/collection"
+	"github.com/rzaal/http-rib/internal/collection"
 )
 
 var varPattern = regexp.MustCompile(`\{\{\s*(\w+)\s*\}\}`)

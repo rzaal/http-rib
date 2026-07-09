@@ -1,3 +1,3 @@
-/ribnip
+/http-rib
 *.log
 requests/env/*.secrets.yaml

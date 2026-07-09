@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/rzaal/ribnip/internal/collection"
-	"github.com/rzaal/ribnip/internal/curl"
-	"github.com/rzaal/ribnip/internal/tui"
+	"github.com/rzaal/http-rib/internal/collection"
+	"github.com/rzaal/http-rib/internal/curl"
+	"github.com/rzaal/http-rib/internal/tui"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		var noColl *collection.ErrNoCollection
 		if errors.As(err, &noColl) {
-			fmt.Printf("No ribnip collection found in %s.\nScaffolding a new one...\n", dir)
+			fmt.Printf("No http-rib collection found in %s.\nScaffolding a new one...\n", dir)
 			if err := collection.Scaffold(dir); err != nil {
 				fmt.Fprintln(os.Stderr, "scaffold:", err)
 				os.Exit(1)

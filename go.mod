@@ -1,4 +1,4 @@
-module github.com/rzaal/ribnip
+module github.com/rzaal/http-rib
 
 go 1.25.0
 

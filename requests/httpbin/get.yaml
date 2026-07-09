@@ -4,5 +4,5 @@ url: "{{baseUrl}}/get"
 headers:
   Accept: application/json
 query:
-  source: ribnip
+  source: http-rib
 body: ""
