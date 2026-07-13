@@ -108,6 +108,37 @@ func (e *Envs) Get(name string) Env {
 	return e.byName[name]
 }
 
+// WriteEnvVar persists key=value into <envName>.secrets.yaml under
+// collectionDir's env dir, creating the file if needed and merging with any
+// existing keys. Used by post-response captures to save values like a
+// session token without touching the committed base env file.
+func WriteEnvVar(collectionDir, envName, key, value string) error {
+	dir := filepath.Join(collectionDir, EnvsDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create env dir: %w", err)
+	}
+
+	path := filepath.Join(dir, envName+secretsSuffix)
+	env, err := loadYAMLEnv(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("read secrets for %s: %w", envName, err)
+		}
+		env = Env{}
+	}
+
+	env[key] = value
+
+	data, err := yaml.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("marshal secrets for %s: %w", envName, err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write secrets for %s: %w", envName, err)
+	}
+	return nil
+}
+
 // Default returns "dev" if present, otherwise the first env alphabetically,
 // otherwise an empty Env with name "".
 func (e *Envs) Default() (string, Env) {

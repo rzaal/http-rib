@@ -1,0 +1,15 @@
+name: Capture Origin
+method: GET
+url: "{{baseUrl}}/get"
+headers:
+  Accept: application/json
+query: {}
+body: ""
+# Demo of post-response captures: httpbin's /get echoes the caller's IP back
+# as "origin" in the JSON body. On send, this pulls it out and writes it to
+# the active env's <env>.secrets.yaml as `origin`, so later requests can
+# reference {{origin}}. Real-world use: capture a sessionId from a login
+# response the same way.
+post:
+  captures:
+    origin: json:.origin

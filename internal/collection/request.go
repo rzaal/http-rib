@@ -15,9 +15,17 @@ type Request struct {
 	Headers map[string]string `yaml:"headers"`
 	Query   map[string]string `yaml:"query"`
 	Body    string            `yaml:"body"`
+	Post    *PostScript       `yaml:"post"`
 
 	// Path is the absolute path to the source file (not serialized).
 	Path string `yaml:"-"`
+}
+
+// PostScript declares values to extract from the response and persist as env
+// vars once the request succeeds (e.g. capturing a session token from a
+// login response). See internal/capture for the extractor grammar.
+type PostScript struct {
+	Captures map[string]string `yaml:"captures"`
 }
 
 func LoadRequest(path string) (*Request, error) {

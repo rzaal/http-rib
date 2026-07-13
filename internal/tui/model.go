@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -11,12 +12,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/rzaal/http-rib/internal/capture"
 	"github.com/rzaal/http-rib/internal/collection"
 	"github.com/rzaal/http-rib/internal/curl"
 )
 
 type responseMsg struct {
-	result curl.Result
+	result   curl.Result
+	captured map[string]string
+	skipped  []string
 }
 
 type mode int
@@ -167,7 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if req := m.selectedRequest(); req != nil && !m.sending {
 				m.sending = true
 				m.status = fmt.Sprintf("sending %s %s...", req.Method, req.URL)
-				return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv()))
+				return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv(), m.coll.Dir, m.currentEnvName()))
 			}
 		case "e":
 			if len(m.envNames) > 0 {
@@ -213,6 +217,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("done: %d in %s (%s)", r.StatusCode, r.TimeTotal, r.Duration.Round(1))
 		}
+		if len(msg.captured) > 0 {
+			if reloaded, err := collection.LoadEnvs(m.coll.Dir); err == nil {
+				m.coll.Envs = reloaded
+			}
+			names := make([]string, 0, len(msg.captured))
+			for k := range msg.captured {
+				names = append(names, k)
+			}
+			sort.Strings(names)
+			m.status += "  |  captured " + strings.Join(names, ", ")
+		}
+		if len(msg.skipped) > 0 {
+			m.status += "  |  skipped " + strings.Join(msg.skipped, ", ")
+		}
 		m.viewport.SetContent(strings.TrimSpace(r.Body))
 		m.viewport.GotoTop()
 		return m, nil
@@ -221,11 +239,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func sendCmd(req *collection.Request, env collection.Env) tea.Cmd {
+func sendCmd(req *collection.Request, env collection.Env, collDir, envName string) tea.Cmd {
 	return func() tea.Msg {
 		args := curl.BuildArgs(req, env)
 		result := curl.Run(context.Background(), args)
-		return responseMsg{result: result}
+
+		msg := responseMsg{result: result}
+		if result.Err == nil && req.Post != nil && len(req.Post.Captures) > 0 && envName != "" {
+			resp := capture.Parse(result.Body)
+			values, skipped := capture.Extract(req.Post.Captures, resp)
+			for k, v := range values {
+				if err := collection.WriteEnvVar(collDir, envName, k, v); err != nil {
+					skipped = append(skipped, k+" (write failed)")
+					delete(values, k)
+				}
+			}
+			msg.captured = values
+			msg.skipped = skipped
+		}
+		return msg
 	}
 }
 
