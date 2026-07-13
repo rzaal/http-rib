@@ -58,12 +58,56 @@ func TestScaffoldAndLoad(t *testing.T) {
 	if _, err := os.Stat(examplePath); err != nil {
 		t.Errorf("expected secrets example file at %s: %v", examplePath, err)
 	}
-	gitignoreData, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	envDir := filepath.Join(dir, requestsDirName, envSubdir)
+	gitignoreData, err := os.ReadFile(filepath.Join(envDir, ".gitignore"))
 	if err != nil {
 		t.Fatalf("expected .gitignore to be created: %v", err)
 	}
 	if !strings.Contains(string(gitignoreData), "*"+secretsSuffix) {
 		t.Errorf(".gitignore missing secrets pattern, got: %s", gitignoreData)
+	}
+}
+
+func TestScaffoldAppendsToExistingGitignore(t *testing.T) {
+	dir := t.TempDir()
+	envDir := filepath.Join(dir, requestsDirName, envSubdir)
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("setup: mkdir env dir: %v", err)
+	}
+
+	preexisting := "node_modules\n"
+	if err := os.WriteFile(filepath.Join(envDir, ".gitignore"), []byte(preexisting), 0o644); err != nil {
+		t.Fatalf("setup: write .gitignore: %v", err)
+	}
+
+	if err := Scaffold(dir); err != nil {
+		t.Fatalf("Scaffold() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(envDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected .gitignore to exist: %v", err)
+	}
+	got := string(data)
+
+	if !strings.Contains(got, "node_modules") {
+		t.Errorf("expected pre-existing content preserved, got: %s", got)
+	}
+	pattern := "*" + secretsSuffix
+	if !strings.Contains(got, pattern) {
+		t.Errorf("expected secrets pattern appended, got: %s", got)
+	}
+
+	// re-running ensureGitignore should not duplicate the line
+	if err := ensureGitignore(envDir); err != nil {
+		t.Fatalf("ensureGitignore() error = %v", err)
+	}
+	data2, err := os.ReadFile(filepath.Join(envDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("re-read .gitignore: %v", err)
+	}
+	if strings.Count(string(data2), pattern) != 1 {
+		t.Errorf("expected pattern to appear exactly once, got: %s", data2)
 	}
 }
 

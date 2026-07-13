@@ -16,8 +16,6 @@ type Manifest struct {
 	Version int    `yaml:"version"`
 }
 
-// Item is a node in the request tree: either a directory (Children set) or a
-// leaf request (Request set).
 type Item struct {
 	Label    string // display name (dir name or request Name)
 	Path     string // relative path from requests/ root, used as a stable key
@@ -36,18 +34,14 @@ type Collection struct {
 const manifestName = "http-rib.yaml"
 const requestsDirName = "requests"
 
-// envSubdir is the requests/ subfolder reserved for environments; it's
-// loaded via LoadEnvs and excluded from the browsable request tree.
 const envSubdir = "env"
 
-// ErrNoCollection is returned by Load when dir has no http-rib.yaml.
 type ErrNoCollection struct{ Dir string }
 
 func (e *ErrNoCollection) Error() string {
 	return fmt.Sprintf("no collection found in %s (missing %s)", e.Dir, manifestName)
 }
 
-// Load reads a collection rooted at dir. Returns *ErrNoCollection if dir has
 // no http-rib.yaml.
 func Load(dir string) (*Collection, error) {
 	manifestPath := filepath.Join(dir, manifestName)
@@ -125,9 +119,6 @@ func loadTree(dir, relPrefix string) ([]*Item, error) {
 	return items, nil
 }
 
-// Flatten walks the tree depth-first into a flat, display-ordered list of
-// items (both dirs and leaves), useful for a flat list widget with indent
-// depth tracked alongside.
 type FlatItem struct {
 	Item  *Item
 	Depth int
@@ -148,11 +139,6 @@ func Flatten(tree []*Item) []FlatItem {
 	return out
 }
 
-// Scaffold creates a starter collection at dir: manifest, a dev env
-// (committed non-secret file plus a gitignored .secrets.yaml sibling for
-// real keys, and a committed .secrets.yaml.example template), and a
-// .gitignore. It errors if a manifest already exists. No sample request is
-// created — the requests/ folder starts empty.
 func Scaffold(dir string) error {
 	manifestPath := filepath.Join(dir, manifestName)
 	if _, err := os.Stat(manifestPath); err == nil {
@@ -185,13 +171,42 @@ func Scaffold(dir string) error {
 		return fmt.Errorf("write dev secrets example: %w", err)
 	}
 
-	gitignorePath := filepath.Join(dir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		ignore := fmt.Sprintf("%s/%s/*%s\n", requestsDirName, envSubdir, secretsSuffix)
-		if err := os.WriteFile(gitignorePath, []byte(ignore), 0o644); err != nil {
+	if err := ensureGitignore(envDir); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureGitignore(envDir string) error {
+	pattern := "*" + secretsSuffix
+	gitignorePath := filepath.Join(envDir, ".gitignore")
+
+	existing, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("read .gitignore: %w", err)
+		}
+		if err := os.WriteFile(gitignorePath, []byte(pattern+"\n"), 0o644); err != nil {
 			return fmt.Errorf("write .gitignore: %w", err)
+		}
+		return nil
+	}
+
+	for _, line := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(line) == pattern {
+			return nil
 		}
 	}
 
+	content := string(existing)
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += pattern + "\n"
+
+	if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write .gitignore: %w", err)
+	}
 	return nil
 }
