@@ -17,7 +17,7 @@ func TestBuildArgsGET(t *testing.T) {
 	}
 	env := collection.Env{"baseUrl": "https://api.example.com", "token": "secret"}
 
-	args := BuildArgs(req, env)
+	args := BuildArgs(req, env, nil)
 	joined := strings.Join(args, " ")
 
 	if !strings.Contains(joined, "-X GET") {
@@ -39,7 +39,7 @@ func TestBuildArgsPOSTWithBody(t *testing.T) {
 	}
 	env := collection.Env{"name": "Alice"}
 
-	args := BuildArgs(req, env)
+	args := BuildArgs(req, env, nil)
 	joined := strings.Join(args, " ")
 
 	if !strings.Contains(joined, "-X POST") {
@@ -56,10 +56,28 @@ func TestBuildArgsQueryParams(t *testing.T) {
 		URL:    "https://api.example.com/users",
 		Query:  map[string]string{"expand": "profile"},
 	}
-	args := BuildArgs(req, collection.Env{})
+	args := BuildArgs(req, collection.Env{}, nil)
 	last := args[len(args)-1]
 	if !strings.Contains(last, "expand=profile") {
 		t.Errorf("expected query param in url, got: %s", last)
+	}
+}
+
+func TestBuildArgsPathAndQueryParams(t *testing.T) {
+	req := &collection.Request{
+		Method: "GET",
+		URL:    "https://api.example.com/users/:id",
+		Query:  map[string]string{"filter": ":status"},
+	}
+	params := map[string]string{"id": "42", "status": "active"}
+
+	args := BuildArgs(req, collection.Env{}, params)
+	last := args[len(args)-1]
+	if !strings.Contains(last, "/users/42") {
+		t.Errorf("expected :id substituted in path, got: %s", last)
+	}
+	if !strings.Contains(last, "filter=active") {
+		t.Errorf("expected :status substituted in query, got: %s", last)
 	}
 }
 
@@ -68,7 +86,7 @@ func TestRunParsesMeta(t *testing.T) {
 	// well-known local-safe endpoint is avoided in unit tests (network);
 	// instead just verify CommandLine renders something sane.
 	req := &collection.Request{Method: "GET", URL: "https://example.com"}
-	args := BuildArgs(req, collection.Env{})
+	args := BuildArgs(req, collection.Env{}, nil)
 	cmdline := CommandLine(args)
 	if !strings.HasPrefix(cmdline, "curl ") {
 		t.Errorf("expected curl prefix, got: %s", cmdline)

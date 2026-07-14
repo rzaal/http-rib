@@ -15,6 +15,7 @@ import (
 	"github.com/rzaal/http-rib/internal/capture"
 	"github.com/rzaal/http-rib/internal/collection"
 	"github.com/rzaal/http-rib/internal/curl"
+	"github.com/rzaal/http-rib/internal/render"
 )
 
 type responseMsg struct {
@@ -30,6 +31,13 @@ const (
 	modeMain
 )
 
+type focus int
+
+const (
+	focusCollection focus = iota
+	focusParam
+)
+
 type Model struct {
 	coll *collection.Collection
 
@@ -40,6 +48,13 @@ type Model struct {
 	envNames []string
 	envIdx   int // active env used for sending
 	envPick  int // cursor position while in the env picker
+
+	// params holds :name values keyed by param name, persisted for the
+	// life of the process (shared across requests that reuse a name).
+	params     map[string]string
+	paramNames []string // :params for the currently selected request
+	focus      focus
+	paramIdx   int
 
 	viewport viewport.Model
 	spinner  spinner.Model
@@ -72,16 +87,70 @@ func New(coll *collection.Collection) Model {
 		m = modeMain
 	}
 
-	return Model{
+	model := Model{
 		coll:     coll,
 		mode:     m,
 		flat:     collection.Flatten(coll.Tree),
 		envNames: envNames,
 		envIdx:   envIdx,
 		envPick:  envIdx,
+		params:   make(map[string]string),
 		spinner:  sp,
 		status:   "ready",
 	}
+	model.refreshParamNames()
+	return model
+}
+
+// refreshParamNames recomputes paramNames for the currently selected
+// request and clamps focus/paramIdx so they stay valid after the selection
+// changes. Previously entered param values are kept in m.params.
+func (m *Model) refreshParamNames() {
+	req := m.selectedRequest()
+	if req == nil {
+		m.paramNames = nil
+	} else {
+		m.paramNames = render.ExtractParamNames(req.URL, req.Query)
+	}
+	if len(m.paramNames) == 0 {
+		m.focus = focusCollection
+		m.paramIdx = 0
+		m.layoutViewport()
+		return
+	}
+	if m.paramIdx >= len(m.paramNames) {
+		m.paramIdx = 0
+	}
+	m.layoutViewport()
+}
+
+// paramsBoxHeight is the total vertical space the params box occupies,
+// including its border and the gap below it, or 0 when the current request
+// has no :params (in which case no box is rendered at all).
+func (m *Model) paramsBoxHeight() int {
+	if len(m.paramNames) == 0 {
+		return 0
+	}
+	return len(m.paramNames) + 2 + 1 // rows + border(top+bottom) + gap below
+}
+
+// layoutViewport recomputes the output viewport's size from the current
+// terminal size and the params box (which grows/shrinks with the selected
+// request), keeping the sidebar/params-box/output layout consistent.
+func (m *Model) layoutViewport() {
+	if !m.ready {
+		return
+	}
+	vpW := m.width - sidebarWidth(m.width) - 6
+	vpH := m.height - 8 - m.paramsBoxHeight()
+	if vpW < 10 {
+		vpW = 10
+	}
+	if vpH < 3 {
+		vpH = 3
+	}
+	m.viewport.Width = vpW
+	m.viewport.Height = vpH
 }
 
 func (m Model) Init() tea.Cmd {
@@ -114,21 +183,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		vpW := m.width - sidebarWidth(m.width) - 6
-		vpH := m.height - 8
-		if vpW < 10 {
-			vpW = 10
-		}
-		if vpH < 3 {
-			vpH = 3
-		}
 		if !m.ready {
-			m.viewport = viewport.New(vpW, vpH)
+			m.viewport = viewport.New(10, 3)
 			m.ready = true
-		} else {
-			m.viewport.Width = vpW
-			m.viewport.Height = vpH
 		}
+		m.layoutViewport()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -156,22 +215,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if m.focus == focusParam {
+			return m.updateParamFocus(msg)
+		}
+
 		switch msg.String() {
 		case "q":
 			return m, tea.Quit
+		case "tab":
+			if len(m.paramNames) > 0 {
+				m.focus = focusParam
+				m.paramIdx = 0
+			}
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
+				m.refreshParamNames()
 			}
 		case "down", "j":
 			if m.cursor < len(m.flat)-1 {
 				m.cursor++
+				m.refreshParamNames()
 			}
 		case "enter":
 			if req := m.selectedRequest(); req != nil && !m.sending {
 				m.sending = true
 				m.status = fmt.Sprintf("sending %s %s...", req.Method, req.URL)
-				return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv(), m.coll.Dir, m.currentEnvName()))
+				return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv(), m.coll.Dir, m.currentEnvName(), m.params))
 			}
 		case "e":
 			if len(m.envNames) > 0 {
@@ -182,7 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.lastCommand != "" {
 				m.status = "curl: " + m.lastCommand
 			} else if req := m.selectedRequest(); req != nil {
-				args := curl.BuildArgs(req, m.currentEnv())
+				args := curl.BuildArgs(req, m.currentEnv(), m.params)
 				m.status = "curl: " + curl.CommandLine(args)
 			}
 		case "r":
@@ -192,6 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor >= len(m.flat) {
 					m.cursor = len(m.flat) - 1
 				}
+				m.refreshParamNames()
 				m.status = "reloaded collection"
 			} else {
 				m.status = "reload failed: " + err.Error()
@@ -239,9 +310,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func sendCmd(req *collection.Request, env collection.Env, collDir, envName string) tea.Cmd {
+// updateParamFocus handles key input while a :param editor above the output
+// window is focused. Tab cycles to the next param, wrapping back to the
+// collection after the last one; shift+tab cycles backward.
+func (m Model) updateParamFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if len(m.paramNames) == 0 {
+		m.focus = focusCollection
+		return m, nil
+	}
+	name := m.paramNames[m.paramIdx]
+
+	switch msg.Type {
+	case tea.KeyTab:
+		m.paramIdx++
+		if m.paramIdx >= len(m.paramNames) {
+			m.paramIdx = 0
+			m.focus = focusCollection
+		}
+	case tea.KeyShiftTab:
+		m.paramIdx--
+		if m.paramIdx < 0 {
+			m.paramIdx = len(m.paramNames) - 1
+		}
+	case tea.KeyEsc:
+		m.focus = focusCollection
+	case tea.KeyEnter:
+		if req := m.selectedRequest(); req != nil && !m.sending {
+			m.sending = true
+			m.status = fmt.Sprintf("sending %s %s...", req.Method, req.URL)
+			return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv(), m.coll.Dir, m.currentEnvName(), m.params))
+		}
+	case tea.KeyBackspace:
+		if v := m.params[name]; len(v) > 0 {
+			m.params[name] = v[:len(v)-1]
+		}
+	case tea.KeySpace:
+		m.params[name] += " "
+	case tea.KeyRunes:
+		m.params[name] += string(msg.Runes)
+	}
+	return m, nil
+}
+
+func sendCmd(req *collection.Request, env collection.Env, collDir, envName string, params map[string]string) tea.Cmd {
 	return func() tea.Msg {
-		args := curl.BuildArgs(req, env)
+		args := curl.BuildArgs(req, env, params)
 		result := curl.Run(context.Background(), args)
 
 		msg := responseMsg{result: result}
@@ -283,9 +396,13 @@ func (m Model) View() string {
 
 	sw := sidebarWidth(m.width)
 	sidebar := m.renderSidebar(sw)
-	main := m.renderMain()
 
-	top := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, main)
+	right := m.renderMain()
+	if paramsBox := m.renderParamsBox(); paramsBox != "" {
+		right = lipgloss.JoinVertical(lipgloss.Left, paramsBox, "", right)
+	}
+
+	top := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
 	statusBar := statusBarStyle.Width(m.width).Render(m.renderStatus())
 
 	return lipgloss.JoinVertical(lipgloss.Left, top, statusBar)
@@ -339,6 +456,47 @@ func (m Model) renderMain() string {
 	return mainStyle.Width(m.viewport.Width + 2).Height(m.viewport.Height + 2).Render(b.String())
 }
 
+// renderParamsBox renders the :param table in its own bordered box, sized
+// to match the output window below it. Each row is "name   value", with
+// names padded to a shared column width. Returns "" when the current
+// request has no :params, so the caller can skip the box entirely.
+func (m Model) renderParamsBox() string {
+	if len(m.paramNames) == 0 {
+		return ""
+	}
+
+	nameWidth := 0
+	for _, name := range m.paramNames {
+		if len(name) > nameWidth {
+			nameWidth = len(name)
+		}
+	}
+
+	var rows []string
+	for i, name := range m.paramNames {
+		val := m.params[name]
+
+		var row string
+		if m.focus == focusParam && i == m.paramIdx {
+			display := val
+			if display == "" {
+				display = "-"
+			}
+			row = paramRowFocusedStyle.Render(fmt.Sprintf("%-*s   %s", nameWidth, name, display))
+		} else {
+			display := dimStyle.Render("-")
+			if val != "" {
+				display = val
+			}
+			row = paramNameStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)) + "   " + display
+		}
+		rows = append(rows, row)
+	}
+
+	content := strings.Join(rows, "\n")
+	return paramsBoxStyle.Width(m.viewport.Width + 2).Render(content)
+}
+
 func (m Model) renderEnvPicker() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(m.coll.Manifest.Name))
@@ -364,5 +522,11 @@ func (m Model) renderEnvPicker() string {
 
 func (m Model) renderStatus() string {
 	keys := "↑/↓ nav · enter send · e env · c curl · r reload · q quit"
+	if len(m.paramNames) > 0 {
+		keys = "tab params · " + keys
+	}
+	if m.focus == focusParam {
+		keys = "type to edit · tab/shift+tab cycle · esc/enter done · ctrl+c quit"
+	}
 	return m.status + "  |  " + keys
 }

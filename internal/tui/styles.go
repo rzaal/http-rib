@@ -38,4 +38,17 @@ var (
 	errStyle = lipgloss.NewStyle().Bold(true).Foreground(colorErr)
 
 	dimStyle = lipgloss.NewStyle().Foreground(colorMuted)
+
+	paramsBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorAccent).
+			Padding(0, 1)
+
+	paramNameStyle = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	paramRowFocusedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("229")).
+				Background(colorAccent).
+				Bold(true)
 )

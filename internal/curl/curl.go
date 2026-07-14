@@ -21,12 +21,13 @@ import (
 // in the combined output stream.
 const metaDelim = "\n===HTTP-RIB-META==="
 
-// BuildArgs renders {{vars}} in req against env and assembles the curl argv
-// (without the leading "curl" itself — that's the exec'd binary name).
-func BuildArgs(req *collection.Request, env collection.Env) []string {
-	renderedURL := render.Apply(req.URL, env)
+// BuildArgs renders {{vars}} and :params in req against env/params and
+// assembles the curl argv (without the leading "curl" itself — that's the
+// exec'd binary name).
+func BuildArgs(req *collection.Request, env collection.Env, params map[string]string) []string {
+	renderedURL := render.ApplyParams(render.Apply(req.URL, env), params)
 	renderedHeaders := render.ApplyMap(req.Headers, env)
-	renderedQuery := render.ApplyMap(req.Query, env)
+	renderedQuery := render.ApplyParamsMap(render.ApplyMap(req.Query, env), params)
 	renderedBody := render.Apply(req.Body, env)
 
 	full := appendQuery(renderedURL, renderedQuery)

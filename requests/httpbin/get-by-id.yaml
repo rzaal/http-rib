@@ -1,0 +1,8 @@
+name: Get By Id
+method: GET
+url: "{{baseUrl}}/anything/:id"
+headers:
+  Accept: application/json
+query:
+  filter: ":status"
+body: ""
