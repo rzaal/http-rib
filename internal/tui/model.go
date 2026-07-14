@@ -3,10 +3,13 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
+	osc52 "github.com/aymanbagabas/go-osc52/v2"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -36,6 +39,7 @@ type focus int
 const (
 	focusCollection focus = iota
 	focusParam
+	focusResponse
 )
 
 type Model struct {
@@ -62,6 +66,9 @@ type Model struct {
 
 	lastCommand string
 	lastResult  *curl.Result
+	lastHeaders string
+	lastBody    string
+	showHeaders bool
 	status      string
 
 	width, height int
@@ -142,7 +149,7 @@ func (m *Model) layoutViewport() {
 		return
 	}
 	vpW := m.width - sidebarWidth(m.width) - 6
-	vpH := m.height - 8 - m.paramsBoxHeight()
+	vpH := m.height - 6 - m.paramsBoxHeight()
 	if vpW < 10 {
 		vpW = 10
 	}
@@ -218,6 +225,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusParam {
 			return m.updateParamFocus(msg)
 		}
+		if m.focus == focusResponse {
+			return m.updateResponseFocus(msg)
+		}
 
 		switch msg.String() {
 		case "q":
@@ -226,6 +236,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.paramNames) > 0 {
 				m.focus = focusParam
 				m.paramIdx = 0
+			} else if m.lastResult != nil {
+				m.focus = focusResponse
+			}
+		case "shift+tab":
+			if m.lastResult != nil {
+				m.focus = focusResponse
+			} else if len(m.paramNames) > 0 {
+				m.focus = focusParam
+				m.paramIdx = len(m.paramNames) - 1
 			}
 		case "up", "k":
 			if m.cursor > 0 {
@@ -278,6 +297,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case clipboardMsg:
+		if msg.err != nil {
+			m.status = "copy failed: " + msg.err.Error()
+		} else {
+			m.status = "copied to clipboard"
+		}
+		return m, nil
+
 	case responseMsg:
 		m.sending = false
 		r := msg.result
@@ -302,8 +329,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.skipped) > 0 {
 			m.status += "  |  skipped " + strings.Join(msg.skipped, ", ")
 		}
-		m.viewport.SetContent(strings.TrimSpace(r.Body))
-		m.viewport.GotoTop()
+		parsed := capture.Parse(r.Body)
+		var hb strings.Builder
+		for i, k := range sortedHeaderKeys(parsed.Headers) {
+			if i > 0 {
+				hb.WriteString("\n")
+			}
+			hb.WriteString(k + ": " + strings.Join(parsed.Headers[k], ", "))
+		}
+		m.lastHeaders = hb.String()
+		m.lastBody = prettyJSON(strings.TrimSpace(parsed.Body))
+		m.showHeaders = false
+		m.setViewportContent()
 		return m, nil
 	}
 
@@ -325,12 +362,17 @@ func (m Model) updateParamFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.paramIdx++
 		if m.paramIdx >= len(m.paramNames) {
 			m.paramIdx = 0
-			m.focus = focusCollection
+			if m.lastResult != nil {
+				m.focus = focusResponse
+			} else {
+				m.focus = focusCollection
+			}
 		}
 	case tea.KeyShiftTab:
 		m.paramIdx--
 		if m.paramIdx < 0 {
 			m.paramIdx = len(m.paramNames) - 1
+			m.focus = focusCollection
 		}
 	case tea.KeyEsc:
 		m.focus = focusCollection
@@ -350,6 +392,86 @@ func (m Model) updateParamFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.params[name] += string(msg.Runes)
 	}
 	return m, nil
+}
+
+// updateResponseFocus handles key input while the response viewport is
+// focused. Space toggles between the response body and headers; tab/shift+tab
+// cycle back to the collection (via the last :param, if any).
+func (m Model) updateResponseFocus(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyRunes && string(msg.Runes) == "C" {
+		text := m.lastBody
+		if m.showHeaders {
+			text = m.lastHeaders
+		}
+		return m, copyToClipboardCmd(text)
+	}
+
+	switch msg.Type {
+	case tea.KeyTab:
+		m.focus = focusCollection
+	case tea.KeyShiftTab:
+		if len(m.paramNames) > 0 {
+			m.focus = focusParam
+			m.paramIdx = len(m.paramNames) - 1
+		} else {
+			m.focus = focusCollection
+		}
+	case tea.KeyEsc:
+		m.focus = focusCollection
+	case tea.KeySpace:
+		m.showHeaders = !m.showHeaders
+		m.setViewportContent()
+	case tea.KeyEnter:
+		if req := m.selectedRequest(); req != nil && !m.sending {
+			m.sending = true
+			m.status = fmt.Sprintf("sending %s %s...", req.Method, req.URL)
+			return m, tea.Batch(m.spinner.Tick, sendCmd(req, m.currentEnv(), m.coll.Dir, m.currentEnvName(), m.params))
+		}
+	default:
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// setViewportContent refreshes the output viewport from the last response,
+// showing either the formatted headers or the (pretty-printed, if JSON) body
+// depending on m.showHeaders.
+func (m *Model) setViewportContent() {
+	if m.showHeaders {
+		m.viewport.SetContent(m.lastHeaders)
+	} else {
+		m.viewport.SetContent(m.lastBody)
+	}
+	m.viewport.GotoTop()
+}
+
+// prettyJSON re-indents s if it is valid JSON, otherwise returns s unchanged.
+func prettyJSON(s string) string {
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return s
+	}
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return s
+	}
+	return string(out)
+}
+
+type clipboardMsg struct {
+	err error
+}
+
+// copyToClipboardCmd copies text to the system clipboard via an OSC52
+// terminal escape sequence, which works locally and over SSH without any
+// external clipboard tool.
+func copyToClipboardCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := osc52.New(text).WriteTo(os.Stdout)
+		return clipboardMsg{err: err}
+	}
 }
 
 func sendCmd(req *collection.Request, env collection.Env, collDir, envName string, params map[string]string) tea.Cmd {
@@ -372,6 +494,15 @@ func sendCmd(req *collection.Request, env collection.Env, collDir, envName strin
 		}
 		return msg
 	}
+}
+
+func sortedHeaderKeys(h map[string][]string) []string {
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func sidebarWidth(totalWidth int) int {
@@ -445,6 +576,14 @@ func (m Model) renderMain() string {
 	}
 	b.WriteString("  ")
 	b.WriteString(dimStyle.Render("env: " + m.currentEnvName()))
+	if m.lastResult != nil {
+		view := "body"
+		if m.showHeaders {
+			view = "headers"
+		}
+		b.WriteString("  ")
+		b.WriteString(dimStyle.Render("view: " + view))
+	}
 	b.WriteString("\n\n")
 
 	if m.sending {
@@ -453,13 +592,13 @@ func (m Model) renderMain() string {
 		b.WriteString(m.viewport.View())
 	}
 
-	return mainStyle.Width(m.viewport.Width + 2).Height(m.viewport.Height + 2).Render(b.String())
+	style := mainStyle
+	if m.focus == focusResponse {
+		style = mainFocusedStyle
+	}
+	return style.Width(m.viewport.Width + 2).Height(m.viewport.Height + 2).Render(b.String())
 }
 
-// renderParamsBox renders the :param table in its own bordered box, sized
-// to match the output window below it. Each row is "name   value", with
-// names padded to a shared column width. Returns "" when the current
-// request has no :params, so the caller can skip the box entirely.
 func (m Model) renderParamsBox() string {
 	if len(m.paramNames) == 0 {
 		return ""
@@ -522,11 +661,14 @@ func (m Model) renderEnvPicker() string {
 
 func (m Model) renderStatus() string {
 	keys := "↑/↓ nav · enter send · e env · c curl · r reload · q quit"
-	if len(m.paramNames) > 0 {
-		keys = "tab params · " + keys
+	if len(m.paramNames) > 0 || m.lastResult != nil {
+		keys = "tab focus response/params · " + keys
 	}
-	if m.focus == focusParam {
+	switch m.focus {
+	case focusParam:
 		keys = "type to edit · tab/shift+tab cycle · esc/enter done · ctrl+c quit"
+	case focusResponse:
+		keys = "↑/↓ scroll · space toggle body/headers · shift+C copy · tab/shift+tab cycle · esc done · ctrl+c quit"
 	}
 	return m.status + "  |  " + keys
 }

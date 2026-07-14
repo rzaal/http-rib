@@ -7,7 +7,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Request is one HTTP request definition loaded from a YAML file.
 type Request struct {
 	Name    string            `yaml:"name"`
 	Method  string            `yaml:"method"`
@@ -17,13 +16,10 @@ type Request struct {
 	Body    string            `yaml:"body"`
 	Post    *PostScript       `yaml:"post"`
 
-	// Path is the absolute path to the source file (not serialized).
+	// Path is the absolute path
 	Path string `yaml:"-"`
 }
 
-// PostScript declares values to extract from the response and persist as env
-// vars once the request succeeds (e.g. capturing a session token from a
-// login response). See internal/capture for the extractor grammar.
 type PostScript struct {
 	Captures map[string]string `yaml:"captures"`
 }

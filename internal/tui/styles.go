@@ -23,6 +23,11 @@ var (
 			BorderForeground(colorMuted).
 			Padding(0, 1)
 
+	mainFocusedStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorAccent).
+				Padding(0, 1)
+
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorAccent)

@@ -156,17 +156,17 @@ func Scaffold(dir string) error {
 		return fmt.Errorf("create env dir: %w", err)
 	}
 
-	base := "baseUrl: \"https://httpbin.org\"\n"
+	base := "API_URL: \"http://localhost:8000\"\n"
 	if err := os.WriteFile(filepath.Join(envDir, "dev.yaml"), []byte(base), 0o644); err != nil {
 		return fmt.Errorf("write dev env: %w", err)
 	}
 
-	secrets := "token: \"dev-secret\"\n"
+	secrets := "API_KEY: \"dev-secret\"\n"
 	if err := os.WriteFile(filepath.Join(envDir, "dev"+secretsSuffix), []byte(secrets), 0o600); err != nil {
 		return fmt.Errorf("write dev secrets: %w", err)
 	}
 
-	example := "token: \"changeme\"\n"
+	example := "API_KEY: \"changeme\"\n"
 	if err := os.WriteFile(filepath.Join(envDir, "dev"+secretsExampleSuffix), []byte(example), 0o644); err != nil {
 		return fmt.Errorf("write dev secrets example: %w", err)
 	}
