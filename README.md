@@ -52,7 +52,19 @@ Run it inside a git repo (or any directory you want as your collection root):
 | `e`       | reopen the environment picker                     |
 | `c`       | show the equivalent curl command                  |
 | `r`       | reload collection from disk                       |
+| `shift+C` | copy response body/headers to clipboard           |
 | `q`       | quit                             |
+
+Copy uses an OSC52 escape sequence, so it works locally and over SSH
+without any external clipboard tool. **If you're inside tmux**, add this
+to your `tmux.conf` (and reload your config, or restart tmux):
+
+```
+set -g allow-passthrough on
+```
+
+Without it, tmux silently swallows the copy sequence — the app still
+reports "copied to clipboard" but nothing lands on the system clipboard.
 
 ## Collection layout
 

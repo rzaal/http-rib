@@ -469,7 +469,13 @@ type clipboardMsg struct {
 // external clipboard tool.
 func copyToClipboardCmd(text string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := osc52.New(text).WriteTo(os.Stdout)
+		seq := osc52.New(text)
+		if os.Getenv("TMUX") != "" {
+			seq = seq.Tmux()
+		} else if strings.HasPrefix(os.Getenv("TERM"), "screen") {
+			seq = seq.Screen()
+		}
+		_, err := seq.WriteTo(os.Stdout)
 		return clipboardMsg{err: err}
 	}
 }
