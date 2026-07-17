@@ -562,7 +562,11 @@ func (m Model) renderSidebar(width int) string {
 	if h < 1 {
 		h = 1
 	}
-	return sidebarStyle.Width(width).Height(h).Render(b.String())
+	style := sidebarStyle
+	if m.focus == focusCollection {
+		style = sidebarFocusedStyle
+	}
+	return style.Width(width).Height(h).Render(b.String())
 }
 
 func (m Model) renderMain() string {
@@ -633,7 +637,11 @@ func (m Model) renderParamsBox() string {
 	}
 
 	content := strings.Join(rows, "\n")
-	return paramsBoxStyle.Width(m.viewport.Width + 2).Render(content)
+	style := paramsBoxStyle
+	if m.focus == focusParam {
+		style = paramsBoxFocusedStyle
+	}
+	return style.Width(m.viewport.Width + 2).Render(content)
 }
 
 func (m Model) renderEnvPicker() string {

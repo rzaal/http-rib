@@ -23,6 +23,11 @@ var (
 			BorderForeground(colorMuted).
 			Padding(0, 1)
 
+	sidebarFocusedStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorAccent).
+				Padding(0, 1)
+
 	sidebarSelectedStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("229")).
 				Background(colorAccent).
@@ -62,8 +67,13 @@ var (
 
 	paramsBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorAccent).
+			BorderForeground(colorMuted).
 			Padding(0, 1)
+
+	paramsBoxFocusedStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorAccent).
+				Padding(0, 1)
 
 	paramNameStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
