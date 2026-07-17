@@ -1,12 +1,22 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
 	colorAccent = lipgloss.Color("#7D56F4")
 	colorMuted  = lipgloss.Color("240")
 	colorOK     = lipgloss.Color("42")
 	colorErr    = lipgloss.Color("196")
+
+	colorMethodGet    = lipgloss.Color("42")
+	colorMethodPost   = lipgloss.Color("33")
+	colorMethodPut    = lipgloss.Color("220")
+	colorMethodPatch  = lipgloss.Color("220")
+	colorMethodDelete = lipgloss.Color("196")
 
 	sidebarStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -39,6 +49,12 @@ var (
 
 	methodStyle = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
 
+	methodStyleGet    = lipgloss.NewStyle().Bold(true).Foreground(colorMethodGet)
+	methodStylePost   = lipgloss.NewStyle().Bold(true).Foreground(colorMethodPost)
+	methodStylePut    = lipgloss.NewStyle().Bold(true).Foreground(colorMethodPut)
+	methodStylePatch  = lipgloss.NewStyle().Bold(true).Foreground(colorMethodPatch)
+	methodStyleDelete = lipgloss.NewStyle().Bold(true).Foreground(colorMethodDelete)
+
 	okStyle  = lipgloss.NewStyle().Bold(true).Foreground(colorOK)
 	errStyle = lipgloss.NewStyle().Bold(true).Foreground(colorErr)
 
@@ -57,3 +73,20 @@ var (
 				Background(colorAccent).
 				Bold(true)
 )
+
+func methodColorStyle(method string) lipgloss.Style {
+	switch strings.ToUpper(method) {
+	case "GET":
+		return methodStyleGet
+	case "POST":
+		return methodStylePost
+	case "PUT":
+		return methodStylePut
+	case "PATCH":
+		return methodStylePatch
+	case "DELETE":
+		return methodStyleDelete
+	default:
+		return methodStyle
+	}
+}

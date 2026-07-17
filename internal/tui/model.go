@@ -547,7 +547,7 @@ func (m Model) renderSidebar(width int) string {
 		indent := strings.Repeat("  ", fi.Depth)
 		label := fi.Item.Label
 		if fi.Item.Request != nil {
-			label = methodStyle.Render(fi.Item.Request.Method) + " " + label
+			label = methodColorStyle(fi.Item.Request.Method).Render(fi.Item.Request.Method) + " " + label
 		} else {
 			label = label + "/"
 		}
@@ -570,7 +570,7 @@ func (m Model) renderMain() string {
 
 	req := m.selectedRequest()
 	if req != nil {
-		b.WriteString(methodStyle.Render(req.Method) + " " + req.URL)
+		b.WriteString(methodColorStyle(req.Method).Render(req.Method) + " " + req.URL)
 	} else {
 		b.WriteString(dimStyle.Render("select a request"))
 	}
